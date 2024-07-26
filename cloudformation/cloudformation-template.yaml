@@ -1,0 +1,161 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "CloudFormation template to deploy a QA model using SageMaker, Lambda, and API Gateway"
+
+Parameters:
+  UserName:
+    Type: String
+    Default: "sanagude"
+    Description: "The user name"
+  LambdaExecutionRoleArn:
+    Type: String
+    Default: "arn:aws:iam::652919303299:role/bank-ttest-global-core-cf-rCFRole-85iC9mmjs5Nn"
+    Description: "IAM role for Lambda with necessary permissions"
+  ApiGatewayId:
+    Type: String
+    Default: "q9vz1ywkg8"
+    Description: "ID of the existing API Gateway"
+  ApiGatewayRootResourceId:
+    Type: String
+    Default: "3rrikwl7j2"
+    Description: "Root Resource ID of the existing API Gateway"
+  SageMakerModelS3Bucket:
+    Type: String
+    Default: "bank-model-artifact-tech-test"
+    Description: "S3 bucket containing the SageMaker model"
+  SageMakerModelS3Key:
+    Type: String
+    Default: "qa-model/model.tar.gz"
+    Description: "S3 key for the SageMaker model artifact"
+  DockerImage:
+    Type: String
+    Default: "763104351884.dkr.ecr.us-east-1.amazonaws.com/huggingface-pytorch-inference:2.1.0-transformers4.37.0-cpu-py310-ubuntu22.04"
+    Description: "Docker image for SageMaker model deployment"
+
+Resources:
+  # IAM Role for Lambda
+  LambdaExecutionRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName: !Sub tech-test-${UserName}-lambda-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service: "lambda.amazonaws.com"
+            Action: "sts:AssumeRole"
+      Policies:
+        - PolicyName: "lambda-policy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - "logs:*"
+                  - "sagemaker:InvokeEndpoint"
+                Resource: "*"
+
+  # SageMaker Model
+  SageMakerModel:
+    Type: "AWS::SageMaker::Model"
+    Properties:
+      ModelName: !Sub tech-test-${UserName}-qa-model
+      PrimaryContainer:
+        Image: !Ref DockerImage
+        ModelDataUrl: !Sub s3://${SageMakerModelS3Bucket}/${SageMakerModelS3Key}
+      ExecutionRoleArn: !Ref LambdaExecutionRoleArn
+
+  # SageMaker Endpoint Configuration
+  SageMakerEndpointConfig:
+    Type: "AWS::SageMaker::EndpointConfig"
+    Properties:
+      EndpointConfigName: !Sub tech-test-${UserName}-qa-endpoint-config
+      ProductionVariants:
+        - VariantName: "AllTraffic"
+          ModelName: !Ref SageMakerModel
+          InitialInstanceCount: 1
+          InstanceType: "ml.t2.medium"
+          InitialVariantWeight: 1.0
+
+  # SageMaker Endpoint
+  SageMakerEndpoint:
+    Type: "AWS::SageMaker::Endpoint"
+    Properties:
+      EndpointName: !Sub tech-test-${UserName}-qa-endpoint
+      EndpointConfigName: !Ref SageMakerEndpointConfig
+
+  # Lambda Function
+  LambdaFunction:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      FunctionName: !Sub tech-test-${UserName}-lambda
+      Handler: "index.lambda_handler"
+      Role: !Ref LambdaExecutionRoleArn
+      Code:
+        ZipFile: |
+          import boto3
+          import json
+
+          def lambda_handler(event, context):
+              sagemaker_runtime = boto3.client('runtime.sagemaker')
+              endpoint_name = 'tech-test-${UserName}-qa-endpoint'
+
+              input_payload = json.dumps({
+                  'question': event['question'],
+                  'context': event['context']
+              })
+
+              response = sagemaker_runtime.invoke_endpoint(
+                  EndpointName=endpoint_name,
+                  ContentType='application/json',
+                  Body=input_payload
+              )
+
+              result = json.loads(response['Body'].read().decode())
+              return {
+                  'statusCode': 200,
+                  'body': json.dumps({
+                      'answer': result['answer'],
+                      'score': result['score'],
+                      'start': result['start'],
+                      'end': result['end']
+                  })
+              }
+      Runtime: "python3.8"
+      MemorySize: 128
+      Timeout: 30
+
+  # API Gateway Resource
+  ApiGatewayResource:
+    Type: "AWS::ApiGateway::Resource"
+    Properties:
+      ParentId: !Ref ApiGatewayRootResourceId
+      PathPart: "questions"
+      RestApiId: !Ref ApiGatewayId
+
+  # API Gateway Method
+  ApiGatewayMethod:
+    Type: "AWS::ApiGateway::Method"
+    Properties:
+      AuthorizationType: "NONE"
+      HttpMethod: "POST"
+      ResourceId: !Ref ApiGatewayResource
+      RestApiId: !Ref ApiGatewayId
+      Integration:
+        IntegrationHttpMethod: "POST"
+        Type: "AWS_PROXY"
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaFunction.Arn}/invocations
+
+  # Lambda Permission for API Gateway
+  LambdaPermission:
+    Type: "AWS::Lambda::Permission"
+    Properties:
+      Action: "lambda:InvokeFunction"
+      FunctionName: !Ref LambdaFunction
+      Principal: "apigateway.amazonaws.com"
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGatewayId}/*/POST/questions
+
+Outputs:
+  ApiEndpoint:
+    Description: "API Gateway endpoint URL for sending questions"
+    Value: !Sub https://${ApiGatewayId}.execute-api.${AWS::Region}.amazonaws.com/prod/questions
