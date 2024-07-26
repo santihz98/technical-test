@@ -1,15 +1,11 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: "CloudFormation template to deploy a QA model using SageMaker, Lambda, and API Gateway"
+Description: "Template to create test for technical test bank"
 
 Parameters:
   UserName:
     Type: String
     Default: "sanagude"
     Description: "The user name"
-  LambdaExecutionRoleArn:
-    Type: String
-    Default: "arn:aws:iam::652919303299:role/bank-ttest-global-core-cf-rCFRole-85iC9mmjs5Nn"
-    Description: "IAM role for Lambda with necessary permissions"
   ApiGatewayId:
     Type: String
     Default: "q9vz1ywkg8"
@@ -32,11 +28,11 @@ Parameters:
     Description: "Docker image for SageMaker model deployment"
 
 Resources:
-  # IAM Role for Lambda
+  # IAM Role for Lambda Execution
   LambdaExecutionRole:
     Type: "AWS::IAM::Role"
     Properties:
-      RoleName: !Sub tech-test-${UserName}-lambda-role
+      RoleName: !Sub ${UserName}-lambda-role
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -45,52 +41,86 @@ Resources:
               Service: "lambda.amazonaws.com"
             Action: "sts:AssumeRole"
       Policies:
-        - PolicyName: "lambda-policy"
+        - PolicyName: "LambdaPolicy"
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
               - Effect: "Allow"
                 Action:
-                  - "logs:*"
+                  - "logs:CreateLogGroup"
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
                   - "sagemaker:InvokeEndpoint"
+                  - "dynamodb:PutItem"
+                  - "dynamodb:UpdateItem"
+                  - "dynamodb:GetItem"
+                  - "dynamodb:Scan"
+                  - "s3:GetObject"
+                  - "s3:PutObject"
+                Resource: "*"
+
+  # IAM Role for SageMaker Execution
+  SageMakerExecutionRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName: !Sub ${UserName}-sagemaker-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service: "sagemaker.amazonaws.com"
+            Action: "sts:AssumeRole"
+      Policies:
+        - PolicyName: "SageMakerPolicy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - "s3:GetObject"
+                  - "s3:ListBucket"
+                  - "logs:*"
+                  - "ecr:GetDownloadUrlForLayer"
+                  - "ecr:BatchGetImage"
+                  - "ecr:GetAuthorizationToken"
                 Resource: "*"
 
   # SageMaker Model
   SageMakerModel:
     Type: "AWS::SageMaker::Model"
     Properties:
-      ModelName: !Sub tech-test-${UserName}-qa-model
+      ModelName: !Sub tech-test-${UserName}-model
       PrimaryContainer:
         Image: !Ref DockerImage
         ModelDataUrl: !Sub s3://${SageMakerModelS3Bucket}/${SageMakerModelS3Key}
-      ExecutionRoleArn: !Ref LambdaExecutionRoleArn
+      ExecutionRoleArn: !GetAtt SageMakerExecutionRole.Arn
 
   # SageMaker Endpoint Configuration
-  SageMakerEndpointConfig:
+  EndpointConfig:
     Type: "AWS::SageMaker::EndpointConfig"
     Properties:
-      EndpointConfigName: !Sub tech-test-${UserName}-qa-endpoint-config
       ProductionVariants:
         - VariantName: "AllTraffic"
-          ModelName: !Ref SageMakerModel
-          InitialInstanceCount: 1
-          InstanceType: "ml.t2.medium"
-          InitialVariantWeight: 1.0
+          ModelName: !GetAtt SageMakerModel.ModelName
+          ServerlessConfig:
+            MaxConcurrency: 20
+            MemorySizeInMB: 5120
 
-  # SageMaker Endpoint
+  #SageMaker Endpoint
   SageMakerEndpoint:
     Type: "AWS::SageMaker::Endpoint"
     Properties:
-      EndpointName: !Sub tech-test-${UserName}-qa-endpoint
-      EndpointConfigName: !Ref SageMakerEndpointConfig
+      EndpointName: !Sub ${UserName}-endpoint
+      EndpointConfigName: !GetAtt EndpointConfig.EndpointConfigName
 
   # Lambda Function
   LambdaFunction:
     Type: "AWS::Lambda::Function"
     Properties:
-      FunctionName: !Sub tech-test-${UserName}-lambda
+      FunctionName: !Sub ${UserName}-lambda
       Handler: "index.lambda_handler"
-      Role: !Ref LambdaExecutionRoleArn
+      Role: !GetAtt LambdaExecutionRole.Arn
       Code:
         ZipFile: |
           import boto3
@@ -98,7 +128,7 @@ Resources:
 
           def lambda_handler(event, context):
               sagemaker_runtime = boto3.client('runtime.sagemaker')
-              endpoint_name = 'tech-test-${UserName}-qa-endpoint'
+              endpoint_name = '${UserName}-endpoint'
 
               input_payload = json.dumps({
                   'question': event['question'],
