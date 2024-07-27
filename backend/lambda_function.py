@@ -3,7 +3,7 @@ import json
 
 def lambda_handler(event, context):
     sagemaker_runtime = boto3.client('runtime.sagemaker')
-    endpoint_name = 'tech-test-qa-endpoint'
+    endpoint_name = 'tech-test-sanagude-endpoint'  # Asegúrate de que el nombre coincida con el creado en CloudFormation
 
     input_payload = json.dumps({
         'question': event['question'],

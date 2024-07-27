@@ -26,6 +26,10 @@ Parameters:
     Type: String
     Default: "763104351884.dkr.ecr.us-east-1.amazonaws.com/huggingface-pytorch-inference:2.1.0-transformers4.37.0-cpu-py310-ubuntu22.04"
     Description: "Docker image for SageMaker model deployment"
+  LambdaS3Key:
+    Type: String
+    Default: "lambda_function.zip"
+    Description: "The S3 key for the Lambda code"
 
 Resources:
   # IAM Role for Lambda Execution
@@ -86,6 +90,37 @@ Resources:
                   - "ecr:GetAuthorizationToken"
                 Resource: "*"
 
+  # IAM Role for S3 Access
+  S3AccessRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName: !Sub ${UserName}-s3-access-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              AWS: !Sub arn:aws:iam::${AWS::AccountId}:user/${UserName}
+            Action: "sts:AssumeRole"
+      Policies:
+        - PolicyName: "S3AccessPolicy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - "s3:PutObject"
+                  - "s3:GetObject"
+                  - "s3:ListBucket"
+                Resource:
+                  - !Sub arn:aws:s3:::tech-test-sanagude-s3
+                  - !Sub arn:aws:s3:::tech-test-sanagude-s3/*
+
+  LambdaS3Bucket:
+    Type: "AWS::S3::Bucket"
+    Properties:
+      BucketName: !Sub tech-test-${UserName}-s3
+
   # SageMaker Model
   SageMakerModel:
     Type: "AWS::SageMaker::Model"
@@ -100,6 +135,7 @@ Resources:
   EndpointConfig:
     Type: "AWS::SageMaker::EndpointConfig"
     Properties:
+      EndpointConfigName: !Sub tech-test-${UserName}-config
       ProductionVariants:
         - VariantName: "AllTraffic"
           ModelName: !GetAtt SageMakerModel.ModelName
@@ -111,47 +147,20 @@ Resources:
   SageMakerEndpoint:
     Type: "AWS::SageMaker::Endpoint"
     Properties:
-      EndpointName: !Sub ${UserName}-endpoint
+      EndpointName: !Sub tech-test-${UserName}-endpoint
       EndpointConfigName: !GetAtt EndpointConfig.EndpointConfigName
 
   # Lambda Function
   LambdaFunction:
     Type: "AWS::Lambda::Function"
     Properties:
-      FunctionName: !Sub ${UserName}-lambda
-      Handler: "index.lambda_handler"
+      FunctionName: !Sub tech-test-${UserName}-lambda
+      Handler: "lambda_function.lambda_handler"
       Role: !GetAtt LambdaExecutionRole.Arn
       Code:
-        ZipFile: |
-          import boto3
-          import json
-
-          def lambda_handler(event, context):
-              sagemaker_runtime = boto3.client('runtime.sagemaker')
-              endpoint_name = '${UserName}-endpoint'
-
-              input_payload = json.dumps({
-                  'question': event['question'],
-                  'context': event['context']
-              })
-
-              response = sagemaker_runtime.invoke_endpoint(
-                  EndpointName=endpoint_name,
-                  ContentType='application/json',
-                  Body=input_payload
-              )
-
-              result = json.loads(response['Body'].read().decode())
-              return {
-                  'statusCode': 200,
-                  'body': json.dumps({
-                      'answer': result['answer'],
-                      'score': result['score'],
-                      'start': result['start'],
-                      'end': result['end']
-                  })
-              }
-      Runtime: "python3.8"
+        S3Bucket: !Sub tech-test-${UserName}-s3
+        S3Key: !Ref LambdaS3Key
+      Runtime: "python3.12"
       MemorySize: 128
       Timeout: 30
 
@@ -189,3 +198,15 @@ Outputs:
   ApiEndpoint:
     Description: "API Gateway endpoint URL for sending questions"
     Value: !Sub https://${ApiGatewayId}.execute-api.${AWS::Region}.amazonaws.com/prod/questions
+  SageMakerEndpointName:
+    Description: "SageMaker endpoint name"
+    Value: !Ref SageMakerEndpoint
+  SageMakerEndpointConfigName:
+    Description: "SageMaker endpoint configuration name"
+    Value: !Ref EndpointConfig
+  LambdaFunctionName:
+    Description: "Lambda function name"
+    Value: !Ref LambdaFunction
+  LambdaS3BucketName:
+    Description: "S3 bucket name for Lambda code"
+    Value: !Ref LambdaS3Bucket
