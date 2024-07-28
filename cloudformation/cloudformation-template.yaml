@@ -164,6 +164,20 @@ Resources:
       MemorySize: 128
       Timeout: 30
 
+  LambdaInvokePolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      PolicyName: !Sub tech-test-${UserName}-lambda-use-policy
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - lambda:*
+            Resource: !GetAtt LambdaFunction.Arn
+      Users:
+        - !Ref UserName
+
   # API Gateway Resource
   ApiGatewayResource:
     Type: "AWS::ApiGateway::Resource"
@@ -184,6 +198,41 @@ Resources:
         IntegrationHttpMethod: "POST"
         Type: "AWS_PROXY"
         Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaFunction.Arn}/invocations
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseTemplates:
+              application/json: ""
+      MethodResponses:
+        - StatusCode: 200
+          ResponseModels:
+            application/json: "Empty"
+
+  # API Gateway Deployment
+  ApiGatewayDeployment:
+    Type: "AWS::ApiGateway::Deployment"
+    Properties:
+      RestApiId: !Ref ApiGatewayId
+      StageName: !Sub tech-test-${UserName}
+    DependsOn: ApiGatewayMethod
+
+  # API Gateway Permissions for User
+  ApiGatewayUserPolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      PolicyName: !Sub tech-test-${UserName}-apigateway-policy
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - "apigateway:PUT"
+              - "apigateway:POST"
+              - "apigateway:PATCH"
+              - "apigateway:DELETE"
+              - "apigateway:GET"
+            Resource: !Sub arn:aws:apigateway:${AWS::Region}::/restapis/${ApiGatewayId}/*
+      Users:
+        - !Ref UserName
 
   # Lambda Permission for API Gateway
   LambdaPermission:
@@ -197,7 +246,7 @@ Resources:
 Outputs:
   ApiEndpoint:
     Description: "API Gateway endpoint URL for sending questions"
-    Value: !Sub https://${ApiGatewayId}.execute-api.${AWS::Region}.amazonaws.com/prod/questions
+    Value: !Sub https://${ApiGatewayId}.execute-api.${AWS::Region}.amazonaws.com/tech-test-sanagude/questions
   SageMakerEndpointName:
     Description: "SageMaker endpoint name"
     Value: !Ref SageMakerEndpoint
