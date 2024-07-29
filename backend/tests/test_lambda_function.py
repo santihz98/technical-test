@@ -1,39 +1,60 @@
-# tests/test_lambda_function.py
-
+import unittest
+from unittest.mock import patch, MagicMock
 import json
-import lambda_function
+import uuid
+from decimal import Decimal
+from lambda_function import lambda_handler
 
-def test_lambda_handler(monkeypatch):
-    # Simulamos la respuesta de SageMaker
-    class MockBoto3Client:
-        def invoke_endpoint(self, EndpointName, ContentType, Body):
-            return {
-                'Body': MockBody()
-            }
+class TestLambdaHandler(unittest.TestCase):
 
-    class MockBody:
-        def read(self):
-            return json.dumps({
+    @patch('lambda_function.boto3.client')
+    @patch('lambda_function.boto3.resource')
+    def test_lambda_handler(self, mock_boto3_resource, mock_boto3_client):
+        # Mock SageMaker response
+        mock_response = {
+            'Body': MagicMock(read=MagicMock(return_value=json.dumps({
                 'answer': 'Paris',
                 'score': 0.9,
                 'start': 0,
                 'end': 5
-            }).encode('utf-8')
+            }).encode('utf-8')))
+        }
 
-    # Mock boto3 client
-    monkeypatch.setattr(lambda_function.boto3, 'client', lambda x: MockBoto3Client())
+        # Mock invoke_endpoint method
+        mock_boto3_client.return_value.invoke_endpoint.return_value = mock_response
 
-    event = {
-        'question': 'What is the capital of France?',
-        'context': 'France is a country in Europe.'
-    }
-    context = {}
+        # Mock DynamoDB Table
+        mock_table = MagicMock()
+        mock_boto3_resource.return_value.Table.return_value = mock_table
 
-    response = lambda_function.lambda_handler(event, context)
-    response_body = json.loads(response['body'])
+        # Create a test event
+        test_event = {
+            'question': 'What is the capital of France?',
+            'context': 'France is a country in Europe.'
+        }
 
-    assert response['statusCode'] == 200
-    assert response_body['answer'] == 'Paris'
-    assert response_body['score'] == 0.9
-    assert response_body['start'] == 0
-    assert response_body['end'] == 5
+        # Run the lambda handler
+        result = lambda_handler(test_event, None)
+
+        # Assertions
+        self.assertEqual(result['statusCode'], 200)
+        body = json.loads(result['body'])
+        self.assertEqual(body['answer'], 'Paris')
+        self.assertEqual(body['score'], 0.9)
+        self.assertEqual(body['start'], 0)
+        self.assertEqual(body['end'], 5)
+
+        # Ensure the interaction was stored in DynamoDB
+        interaction = {
+            'InteractionId': unittest.mock.ANY,  # Allow any value for InteractionId
+            'question': test_event['question'],
+            'context': test_event['context'],
+            'answer': 'Paris',
+            'score': Decimal('0.9'),
+            'start': 0,
+            'end': 5
+        }
+        mock_table.put_item.assert_called_with(Item=interaction)
+
+if __name__ == '__main__':
+    unittest.main()
