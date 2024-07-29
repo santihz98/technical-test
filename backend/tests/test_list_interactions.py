@@ -8,11 +8,9 @@ class TestListInteractionsHandler(unittest.TestCase):
 
     @patch('list_interactions.boto3.resource')
     def test_list_interactions_handler(self, mock_boto3_resource):
-        # Mock DynamoDB Table
         mock_table = MagicMock()
         mock_boto3_resource.return_value.Table.return_value = mock_table
 
-        # Mock DynamoDB response
         mock_response = {
             'Items': [
                 {
@@ -28,10 +26,8 @@ class TestListInteractionsHandler(unittest.TestCase):
         }
         mock_table.scan.return_value = mock_response
 
-        # Run the lambda handler
         result = lambda_handler(None, None)
 
-        # Assertions
         self.assertEqual(result['statusCode'], 200)
         body = json.loads(result['body'])
         self.assertEqual(len(body), 1)

@@ -355,21 +355,6 @@ Resources:
       - ApiGatewayGetMethodOptions
       - ApiGatewayGetMethodOptionsList
 
-  # ApiGatewayStage:
-  #   Type: AWS::ApiGateway::Stage
-  #   Properties:
-  #     RestApiId: !Ref ApiGatewayId
-  #     StageName: !Sub tech-test-${UserName}
-  #     DeploymentId: !Ref ApiGatewayDeploymentV3
-  #     MethodSettings:
-  #       - ResourcePath: "/*"
-  #         HttpMethod: "*"
-  #         DataTraceEnabled: true
-  #         MetricsEnabled: true
-  #         LoggingLevel: INFO
-  #         ThrottlingBurstLimit: 500
-  #         ThrottlingRateLimit: 1000
-
   # API Gateway Permissions for User
   ApiGatewayUserPolicy:
     Type: "AWS::IAM::Policy"
