@@ -4,6 +4,11 @@ Para la solución a este proyecto se implemento un stack de cloud formation con 
 
 Vamos a ver mas a detalle la documentación de cada paso realizado.
 
+# Clonar el repositorio
+```bash
+https://github.com/santihz98/technical-test
+```
+
 # Componente Arquitectura
 1.  **Frontend (Angular 18):**
     
