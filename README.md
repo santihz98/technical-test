@@ -95,12 +95,19 @@ Este proyecto contiene dos funciones Lambda desarrolladas en Python. Una funció
 ## Estructura del Proyecto
 
 backend/
-├── lambda_function.py
-├── list_interactions.py
+
+├── lambda\_function.py
+
+├── list\_interactions.py
+
 ├── tests/
-│ ├── test_lambda_function.py
-│ └── test_list_interactions.py
+
+│ ├── test\_lambda\_function.py
+
+│ └── test\_list\_interactions.py
+
 ├── requirements.txt
+
 └── README.md
 
 ### Funciones Lambda
