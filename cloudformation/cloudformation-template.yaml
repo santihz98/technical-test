@@ -164,6 +164,27 @@ Resources:
       MemorySize: 128
       Timeout: 30
 
+  ListInteractionsLambdaFunction:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      FunctionName: !Sub tech-test-${UserName}-list-interactions-lambda
+      Handler: "list_interactions.lambda_handler"
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        S3Bucket: !Sub tech-test-${UserName}-s3
+        S3Key: "list_interactions.zip"
+      Runtime: "python3.12"
+      MemorySize: 128
+      Timeout: 30
+
+  ListInteractionsLambdaPermission:
+    Type: "AWS::Lambda::Permission"
+    Properties:
+      Action: "lambda:InvokeFunction"
+      FunctionName: !Ref ListInteractionsLambdaFunction
+      Principal: "apigateway.amazonaws.com"
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGatewayId}/*/*/*
+
   LambdaInvokePolicy:
     Type: "AWS::IAM::Policy"
     Properties:
@@ -174,7 +195,9 @@ Resources:
           - Effect: Allow
             Action:
               - lambda:*
-            Resource: !GetAtt LambdaFunction.Arn
+            Resource:
+              - !GetAtt LambdaFunction.Arn
+              - !GetAtt ListInteractionsLambdaFunction.Arn
       Users:
         - !Ref UserName
 
@@ -184,6 +207,13 @@ Resources:
     Properties:
       ParentId: !Ref ApiGatewayRootResourceId
       PathPart: "questions"
+      RestApiId: !Ref ApiGatewayId
+
+  ApiGatewayListInteractionsResource:
+    Type: "AWS::ApiGateway::Resource"
+    Properties:
+      ParentId: !Ref ApiGatewayRootResourceId
+      PathPart: "interactions"
       RestApiId: !Ref ApiGatewayId
 
   # API Gateway Method
@@ -196,12 +226,19 @@ Resources:
       RestApiId: !Ref ApiGatewayId
       Integration:
         IntegrationHttpMethod: "POST"
-        Type: "AWS_PROXY"
+        Type: "AWS"
         Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaFunction.Arn}/invocations
         IntegrationResponses:
           - StatusCode: 200
             ResponseParameters:
               method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type'"
+              method.response.header.Access-Control-Allow-Methods: "'OPTIONS,POST,GET'"
+              method.response.header.Content-Type: "'application/json'"
+              method.response.header.Strict-Transport-Security: "'max-age=31536000; includeSubDomains; preload'"
+              method.response.header.X-Content-Type-Options: "'nosniff'"
+              method.response.header.X-Permitted-Cross-Domain-Policies: "'none'"
+              method.response.header.Content-Security-Policy: "'frame-ancestors 'none'; upgrade-insecure-requests'"
             ResponseTemplates:
               application/json: ""
       MethodResponses:
@@ -210,14 +247,128 @@ Resources:
             application/json: "Empty"
           ResponseParameters:
             method.response.header.Access-Control-Allow-Origin: true
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Content-Type: true
+            method.response.header.Strict-Transport-Security: true
+            method.response.header.X-Content-Type-Options: true
+            method.response.header.X-Permitted-Cross-Domain-Policies: true
+            method.response.header.Content-Security-Policy: true
+
+  ApiGatewayGetMethodOptions:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGatewayId
+      ResourceId: !Ref ApiGatewayResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+        PassthroughBehavior: WHEN_NO_MATCH
+        IntegrationResponses:
+          - StatusCode: "200"
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'POST,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+      MethodResponses:
+        - StatusCode: "200"
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+
+  ApiGatewayGetMethodOptionsList:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGatewayId
+      ResourceId: !Ref ApiGatewayListInteractionsResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+        PassthroughBehavior: WHEN_NO_MATCH
+        IntegrationResponses:
+          - StatusCode: "200"
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'POST,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+      MethodResponses:
+        - StatusCode: "200"
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+
+  ApiGatewayListInteractionsMethod:
+    Type: "AWS::ApiGateway::Method"
+    Properties:
+      AuthorizationType: "NONE"
+      HttpMethod: "POST"
+      ResourceId: !Ref ApiGatewayListInteractionsResource
+      RestApiId: !Ref ApiGatewayId
+      Integration:
+        IntegrationHttpMethod: "POST"
+        Type: "AWS"
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ListInteractionsLambdaFunction.Arn}/invocations
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type'"
+              method.response.header.Access-Control-Allow-Methods: "'OPTIONS,POST,GET'"
+              method.response.header.Content-Type: "'application/json'"
+              method.response.header.Strict-Transport-Security: "'max-age=31536000; includeSubDomains; preload'"
+              method.response.header.X-Content-Type-Options: "'nosniff'"
+              method.response.header.X-Permitted-Cross-Domain-Policies: "'none'"
+              method.response.header.Content-Security-Policy: "'frame-ancestors 'none'; upgrade-insecure-requests'"
+            ResponseTemplates:
+              application/json: ""
+      MethodResponses:
+        - StatusCode: 200
+          ResponseModels:
+            application/json: "Empty"
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Origin: true
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Content-Type: true
+            method.response.header.Strict-Transport-Security: true
+            method.response.header.X-Content-Type-Options: true
+            method.response.header.X-Permitted-Cross-Domain-Policies: true
+            method.response.header.Content-Security-Policy: true
 
   # API Gateway Deployment
-  ApiGatewayDeployment:
+  ApiGatewayDeploymentV4:
     Type: "AWS::ApiGateway::Deployment"
     Properties:
       RestApiId: !Ref ApiGatewayId
       StageName: !Sub tech-test-${UserName}
-    DependsOn: ApiGatewayMethod
+    DependsOn:
+      - ApiGatewayMethod
+      - ApiGatewayListInteractionsMethod
+      - ApiGatewayGetMethodOptions
+      - ApiGatewayGetMethodOptionsList
+
+  # ApiGatewayStage:
+  #   Type: AWS::ApiGateway::Stage
+  #   Properties:
+  #     RestApiId: !Ref ApiGatewayId
+  #     StageName: !Sub tech-test-${UserName}
+  #     DeploymentId: !Ref ApiGatewayDeploymentV3
+  #     MethodSettings:
+  #       - ResourcePath: "/*"
+  #         HttpMethod: "*"
+  #         DataTraceEnabled: true
+  #         MetricsEnabled: true
+  #         LoggingLevel: INFO
+  #         ThrottlingBurstLimit: 500
+  #         ThrottlingRateLimit: 1000
 
   # API Gateway Permissions for User
   ApiGatewayUserPolicy:
@@ -237,6 +388,20 @@ Resources:
             Resource: !Sub arn:aws:apigateway:${AWS::Region}::/restapis/${ApiGatewayId}/*
       Users:
         - !Ref UserName
+
+  InteractionsTable:
+    Type: "AWS::DynamoDB::Table"
+    Properties:
+      TableName: !Sub tech-test-${UserName}-table
+      AttributeDefinitions:
+        - AttributeName: "InteractionId"
+          AttributeType: "S"
+      KeySchema:
+        - AttributeName: "InteractionId"
+          KeyType: "HASH"
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
 
   # Lambda Permission for API Gateway
   LambdaPermission:

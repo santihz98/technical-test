@@ -1,0 +1,36 @@
+<div class="bg-white shadow-md rounded my-6">
+  <table class="min-w-full bg-white">
+    <thead class="bg-gray-800 text-white">
+      <tr>
+        <th class="w-1/5 text-left py-3 px-4 uppercase font-semibold text-sm">
+          Question
+        </th>
+        <th class="w-1/5 text-left py-3 px-4 uppercase font-semibold text-sm">
+          Context
+        </th>
+        <th class="w-1/5 text-left py-3 px-4 uppercase font-semibold text-sm">
+          Answer
+        </th>
+        <th class="w-1/5 text-left py-3 px-4 uppercase font-semibold text-sm">
+          Score
+        </th>
+        <th class="w-1/5 text-left py-3 px-4 uppercase font-semibold text-sm">
+          Start
+        </th>
+        <th class="w-1/5 text-left py-3 px-4 uppercase font-semibold text-sm">
+          End
+        </th>
+      </tr>
+    </thead>
+    <tbody class="text-gray-700">
+      <tr *ngFor="let interaction of interationQuestion">
+        <td class="w-1/5 text-left py-3 px-4">{{ interaction.question }}</td>
+        <td class="w-1/5 text-left py-3 px-4">{{ interaction.context }}</td>
+        <td class="w-1/5 text-left py-3 px-4">{{ interaction.answer }}</td>
+        <td class="w-1/5 text-left py-3 px-4">{{ interaction.score }}</td>
+        <td class="w-1/5 text-left py-3 px-4">{{ interaction.start }}</td>
+        <td class="w-1/5 text-left py-3 px-4">{{ interaction.end }}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
