@@ -6,7 +6,8 @@ Vamos a ver mas a detalle la documentación de cada paso realizado.
 
 # Clonar el repositorio
 ```bash
-https://github.com/santihz98/technical-test
+git clone https://github.com/santihz98/technical-test
+cd technical-test
 ```
 
 # Componente Arquitectura
@@ -52,7 +53,6 @@ https://github.com/santihz98/technical-test
 La infraestructura en AWS se despliega utilizando AWS CloudFormation. dentro de la carpeta cloudformation se encuentra el archivo de plantilla de CloudFormation que crea los recursos necesarios para la implementación de este proyecto.
 
 # Frontend
---------
 
 ### Descripción
 
@@ -85,6 +85,10 @@ Para desplegar el frontend en un contenedor Docker, sigue estos pasos:
 docker-compose up --build
 ```
 Esto construirá y ejecutará el contenedor, exponiendo la aplicación en http://localhost:4200.
+
+### Despliegue en Vercel
+
+El frontend está desplegado en Vercel y puede ser accesado en el siguiente link: https://tech-test-sanagude-26habctn8-santiagos-projects-bb59c8e9.vercel.app/
 
 # Backend
 
@@ -128,3 +132,17 @@ backend/
 2. **list_interactions.py**
 
    Esta función Lambda lista todas las interacciones almacenadas en la tabla de DynamoDB.
+
+### Pruebas Unitarias
+
+Para ejecutar las pruebas unitarias de las Lambdas:
+
+1. **Instalar dependencias:**
+```bash
+pip install -r requirements.txt
+```
+
+2. **Ejecutar las pruebas:**
+```bash
+python -m unittest discover -s tests
+```
